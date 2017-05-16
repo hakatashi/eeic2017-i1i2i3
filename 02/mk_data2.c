@@ -3,7 +3,7 @@
 
 int main(int argc, char const *argv[]) {
 	if (argc != 2) {
-		fprintf(stderr, "Usage: %s <filename>", argv[0]);
+		fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
 		exit(1);
 	}
 
@@ -18,7 +18,12 @@ int main(int argc, char const *argv[]) {
 
 	unsigned int i;
 	for (i = 0; i < 0x100; i++) {
-		fwrite((char *)&i, sizeof(char), 1, file);
+		int written_bytes = fwrite((char *)&i, sizeof(char), 1, file);
+
+		if (written_bytes < 1) {
+			perror("fwrite");
+			exit(1);
+		}
 	}
 
 	fclose(file);
