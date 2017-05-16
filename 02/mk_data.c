@@ -4,7 +4,12 @@
 int main(int argc, char const *argv[]) {
 	FILE *file = fopen("my_data.bin", "wb");
 
-	unsigned int i = 0;
+	if (file == NULL) {
+		perror("fopen");
+		exit(1);
+	}
+
+	unsigned int i;
 	for (i = 0; i < 0x100; i++) {
 		fwrite((char *)&i, sizeof(char), 1, file);
 	}
