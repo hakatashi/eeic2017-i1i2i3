@@ -2,14 +2,7 @@
 #include <stdlib.h>
 
 int main(int argc, char const *argv[]) {
-	if (argc != 2) {
-		fprintf(stderr, "Usage: %s <filename>", argv[0]);
-		exit(1);
-	}
-
-	const char *filename = argv[1];
-
-	FILE *file = fopen(filename, "wb");
+	FILE *file = fopen("my_data.bin", "wb");
 
 	if (file == NULL) {
 		perror("fopen");
