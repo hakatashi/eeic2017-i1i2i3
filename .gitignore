@@ -2,3 +2,5 @@ a.out
 *.bin
 *.raw
 *.wav
+*.bz2
+*.png

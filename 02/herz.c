@@ -7,6 +7,8 @@
 
 const char herz[256] = " cdegffAggCBCgecdefgAgfedecbcd6bdfedecdegffAggCBCgecdeagfedc6cbcegCgecegCCCCCC";
 const char herzbase[256] = "2634063456162054065512222";
+//const char herz[256] = "EE E CE G   g   C  g  e  A B AA";
+//const char herzbase[256] = "                         ";
 
 int get_height(char note) {
 	int note_height;
@@ -49,7 +51,7 @@ int get_height(char note) {
 		return -100;
 	}
 
-	return note_height + 12;
+	return note_height - 12;
 }
 
 int main(int argc, char const *argv[]) {
@@ -75,14 +77,16 @@ int main(int argc, char const *argv[]) {
 				buffer = 0;
 			} else {
 				const double frequency = 440.0 * pow(2.0, (note_height - 1) / 12.0);
-				buffer = amplitude * sin(2.0 * (double)M_PI * frequency * (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY);
+				const double val = sin(2.0 * (double)M_PI * frequency * (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY);
+				buffer = amplitude * (val > 0 ? 1 : -1);
 			}
 
 			if (base_height == -100) {
 				buffer += 0;
 			} else {
 				const double frequency = 440.0 * pow(2.0, (base_height - 1) / 12.0);
-				buffer += amplitude * sin(2.0 * (double)M_PI * frequency * (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY);
+				const double val = sin(2.0 * (double)M_PI * frequency * (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY);
+				buffer += amplitude * (val > 0 ? 1 : -1);
 			}
 
 			int written_bytes = fwrite(&buffer, sizeof(short), 1, stdout);
