@@ -49,7 +49,7 @@ int get_height(char note) {
 		return -100;
 	}
 
-	return note_height;
+	return note_height - 24;
 }
 
 int main(int argc, char const *argv[]) {
@@ -75,13 +75,19 @@ int main(int argc, char const *argv[]) {
 				buffer = 0;
 			} else {
 				const double frequency = 440.0 * pow(2.0, (note_height - 1) / 12.0);
+				const double modulation_index = 10.0;
+				const double modulator_ratio = 2.0;
 				buffer = amplitude * sin(
-					2.0 * (double)M_PI * frequency * (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY
-					+ 10.0 * sin(2.0 * (double)M_PI * frequency * 1.0 * (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY)
+					2.0 * (double)M_PI * frequency
+					* (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY
+					+ modulation_index * sin(
+						2.0 * (double)M_PI * frequency * modulator_ratio
+						* (double)(note_index * samples + i) / (double)SAMPLING_FREQUENCY
+					)
 				);
 			}
 
-			if (base_height == -100) {
+			if (1 || base_height == -100) {
 				buffer += 0;
 			} else {
 				const double frequency = 440.0 * pow(2.0, (base_height - 1) / 12.0);
