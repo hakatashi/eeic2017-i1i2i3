@@ -52,7 +52,7 @@ int main(int argc, char const *argv[]) {
 	}
 
 	while(1){
-		char buf[10000];
+		char buf[1000000];
 		struct sockaddr_in address;
 		int address_len = sizeof(address);
 		const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr*)&address, &address_len);
@@ -62,14 +62,17 @@ int main(int argc, char const *argv[]) {
 			return;
 		}
 
-		printf("rec'd %d bytes\n", n);
+		//printf("rec'd %d bytes\n", n);
 
 		struct iphdr *ip_header = (struct iphdr*)buf;
-		printf("IP header is %d bytes.\n", ip_header->ihl * 4);
-		for (i = 0; i < n; i++) {
-			printf("%02X%s", (uint8_t)buf[i], (i + 1) % 16 ? " " : "\n");
+		struct icmphdr *icmp_header = (struct icmphdr*)(buf + ip_header->ihl * 4);
+		//printf("%d\n", sizeof(icmp_header));
+		//printf("IP header is %d bytes.\n", ip_header->ihl * 4);
+		for (i = ip_header->ihl * 4 + sizeof(icmp_header); i < n; i++) {
+			//printf("%02X%s", (uint8_t)buf[i], (i + 1) % 16 ? " " : "\n");
+			write(1,buf+i,1);
 		}
-		printf("\n");
+		//printf("\n");
 
 		/*
 		struct icmphdr *icmp_hdr = (struct icmphdr *)((char *)ip_hdr + (4 * ip_hdr->ihl));
