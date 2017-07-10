@@ -7,6 +7,7 @@
 #include <resolv.h>
 #include <string.h>
 #include <strings.h>
+#include <opus.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -14,7 +15,12 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
 
-#define PACKETSIZE 64
+#define PACKETSIZE 0x2000
+#define SAMPLE_RATE 24000
+#define MAX_FRAME_SIZE 0x100
+#define BITRATE (16 * 1024)
+#define CHANNELS 1
+#define APPLICATION OPUS_APPLICATION_AUDIO
 
 struct packet {
 	struct icmphdr hdr;
@@ -44,41 +50,74 @@ unsigned short checksum(void *b, int len) {
 
 int main(int argc, char const *argv[]) {
 	int ret, i;
+	OpusDecoder *decoder;
+  int error;
+	opus_int16 output[BITRATE*100];
+	unsigned char pcm_bytes[MAX_FRAME_SIZE*CHANNELS*2];
 
 	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (socket_id < 0) {
 		perror("socket");
-		return;
+		exit(1);
 	}
 
+	decoder = opus_decoder_create(SAMPLE_RATE, CHANNELS, &error);
+   if (error<0)
+   {
+      fprintf(stderr, "failed to create decoder: %s\n", opus_strerror(error));
+      return EXIT_FAILURE;
+   }
+
 	while(1){
-		char buf[1000000];
+		unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
 		struct sockaddr_in address;
 		int address_len = sizeof(address);
 		const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr*)&address, &address_len);
 
 		if (n == -1) {
 			perror("recvfrom");
-			return;
+			exit(1);
 		}
-
-		//printf("rec'd %d bytes\n", n);
 
 		struct iphdr *ip_header = (struct iphdr*)buf;
 		struct icmphdr *icmp_header = (struct icmphdr*)(buf + ip_header->ihl * 4);
-		//printf("%d\n", sizeof(icmp_header));
-		//printf("IP header is %d bytes.\n", ip_header->ihl * 4);
-		for (i = ip_header->ihl * 4 + sizeof(icmp_header); i < n; i++) {
-			//printf("%02X%s", (uint8_t)buf[i], (i + 1) % 16 ? " " : "\n");
-			write(1,buf+i,1);
-		}
-		//printf("\n");
 
-		/*
-		struct icmphdr *icmp_hdr = (struct icmphdr *)((char *)ip_hdr + (4 * ip_hdr->ihl));
+		int message_pointer = 0;
 
-		printf("ICMP msgtype=%d, code=%d", icmp_hdr->type, icmp_hdr->code);
-		*/
+		for(i=0;i<20;i++){
+
+			int frame_size = buf[ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer];
+			printf("%d\n", message_pointer);
+
+			printf("length: %d\n", frame_size);
+			int j;
+			 for (j = 0; j < frame_size; j++) {
+				      printf("%02x ", buf[ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer + j + 1]);
+			     if (j % 16 == 15) puts("");
+				  }
+			 puts("");
+
+			opus_int32 data_size = opus_decode(decoder,
+				buf + ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer + 1,
+		 												 frame_size, output, BITRATE*100, 0);
+		  if (data_size<0)
+      {
+         fprintf(stderr, "decoder failed: %s\n", opus_strerror(error));
+         return EXIT_FAILURE;
+    }
+
+		message_pointer += frame_size + 1;
+
+
+		for(j=0;j<CHANNELS*data_size;j++)
+      {
+         pcm_bytes[2*j]=output[j]&0xFF;
+         pcm_bytes[2*j+1]=(output[j]>>8)&0xFF;
+    }
+
+	  //write(1,pcm_bytes,CHANNELS*data_size*2);
+	}
+
 	}
 
 	return 0;
