@@ -23,6 +23,8 @@
 #define BITRATE (16 * 1024)
 #define CHANNELS 1
 
+#define ICMP_IDENTIFIER 0xDEAD
+
 int main(int argc, const char *argv[]) {
 	OpusDecoder *decoder;
 	int error;
@@ -44,6 +46,8 @@ int main(int argc, const char *argv[]) {
 		return EXIT_FAILURE;
 	}
 
+	uint16_t current_sequence_number = 0;
+
 	while (1) {
 		unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
 		struct sockaddr_in address;
@@ -55,11 +59,21 @@ int main(int argc, const char *argv[]) {
 			exit(1);
 		}
 
-		fprintf(stderr, "Receive: %d bytes\n", n);
-
 		struct iphdr *ip_header = (struct iphdr*)buf;
 		struct icmphdr *icmp_header = (struct icmphdr*)(buf + ip_header->ihl * 4);
 		uint8_t *icmp_body = buf + ip_header->ihl * 4 + sizeof(icmp_header);
+
+		fprintf(stderr, "Receive: %d bytes, ID = 0x%04X, Seq = %d\n", n, icmp_header->un.echo.id, icmp_header->un.echo.sequence);
+
+		if (icmp_header->un.echo.id != ICMP_IDENTIFIER) {
+			continue;
+		}
+
+		if (icmp_header->un.echo.sequence <= current_sequence_number) {
+			continue;
+		}
+
+		current_sequence_number = icmp_header->un.echo.sequence;
 
 		int message_pointer = 0;
 		unsigned int total_output = 0;
@@ -86,7 +100,7 @@ int main(int argc, const char *argv[]) {
 			total_output += data_size * sizeof(opus_int16);
 		}
 
-		fprintf(stderr, "Output: %u bytes\n", total_output);
+		fprintf(stderr, "Write: %u bytes\n", total_output);
 	}
 
 	return 0;

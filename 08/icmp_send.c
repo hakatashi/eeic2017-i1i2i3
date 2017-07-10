@@ -22,6 +22,8 @@
 #define SAMPLE_RATE 24000
 #define BITRATE (16 * 1024)
 
+#define ICMP_IDENTIFIER 0xDEAD
+
 struct packet {
 	struct icmphdr hdr;
 	char msg[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
@@ -60,7 +62,7 @@ unsigned short checksum(void *b, int len) {
 	return result;
 }
 
-void ping(const char *host, const uint8_t *buffer, int size) {
+void ping(const char *host, const uint8_t *buffer, int size, uint16_t sequence_number) {
 	int ret;
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -93,13 +95,12 @@ void ping(const char *host, const uint8_t *buffer, int size) {
 	bzero(&packet_id, sizeof(packet_id));
 
 	packet_id.hdr.type = ICMP_ECHO;
-	const int pid = getpid();
-	packet_id.hdr.un.echo.id = pid;
+	packet_id.hdr.un.echo.id = ICMP_IDENTIFIER;
 
 	memset(packet_id.msg, 0, sizeof(packet_id.msg));
 	memcpy(packet_id.msg, buffer, size);
 
-	packet_id.hdr.un.echo.sequence = 0;
+	packet_id.hdr.un.echo.sequence = sequence_number;
 	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id.hdr) + size);
 
 	if (sendto(socket_id, &packet_id, sizeof(packet_id.hdr) + size, 0, (struct sockaddr*)&address, sizeof(address)) <= 0) {
@@ -139,6 +140,8 @@ int main(int argc, char const *argv[]) {
 		exit(1);
 	}
 
+	uint16_t sequence_number = 1;
+
 	while (1) {
 		uint8_t packet_data[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
 		int packet_data_size = 0;
@@ -150,7 +153,7 @@ int main(int argc, char const *argv[]) {
 			ret = read_n(0, SAMPLES_PER_FRAME * sizeof(opus_int16), buffer);
 
 			if (ret == 0) {
-				break;
+				exit(0);
 			}
 
 			// BE => LE
@@ -173,9 +176,10 @@ int main(int argc, char const *argv[]) {
 			packet_data_size += output_data_length + 1;
 		}
 
-		printf("Ping: %d bytes\n", packet_data_size);
+		printf("Ping: %d bytes, Seq = %d\n", packet_data_size, sequence_number);
 
-		ping(host, packet_data, packet_data_size);
+		ping(host, packet_data, packet_data_size, sequence_number);
+		sequence_number++;
 
 		usleep(200 * 1000);
 	}
