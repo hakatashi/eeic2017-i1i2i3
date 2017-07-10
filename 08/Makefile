@@ -1,5 +1,5 @@
 COMPILER = clang
-CFLAGS = -g -Werror -Wall -Wextra
+CFLAGS = -g -Werror -Wall -Wextra -D_GNU_SOURCE -std=c11
 LDFLAGS = -lopus
 INCLUDE = -I/usr/include/opus
 
