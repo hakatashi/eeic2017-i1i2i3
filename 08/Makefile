@@ -3,10 +3,11 @@ CFLAGS = -Werror -Wextra
 LDFLAGS = -lopus
 INCLUDE = -I/usr/include/opus
 
-all: icmp_send
+all: bin/icmp_send bin/icmp_recv
 
 %.o: %.c
 	$(COMPILER) $(CFLAGS) $(INCLUDE) -o $@ -c $<
 
-icmp_send: icmp_send.o
+bin/%: %.o
+	@mkdir -p bin
 	$(COMPILER) -o $@ $< $(LDFLAGS)
