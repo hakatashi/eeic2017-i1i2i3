@@ -17,19 +17,19 @@
 #include <netinet/tcp.h>
 
 #define SAMPLES_PER_FRAME 480
-#define FRAMES_PER_PACKET 20
+#define FRAMES_PER_PACKET 50
 #define MAX_FRAME_SIZE 0x100
 #define SAMPLE_RATE 24000
 #define BITRATE (16 * 1024)
 
 struct packet {
 	struct icmphdr hdr;
-	uint8_t *msg;
+	char msg[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
 };
 
 /* fd から 必ず n バイト読み, bufferへ書く.
-	n バイト未満でEOFに達したら, 残りは0で埋める.
-	fd から読み出されたバイト数を返す */
+        n バイト未満でEOFに達したら, 残りは0で埋める.
+        fd から読み出されたバイト数を返す */
 ssize_t read_n(int fd, ssize_t n, void * buffer) {
 	ssize_t re = 0;
 	while (re < n) {
@@ -47,12 +47,12 @@ ssize_t read_n(int fd, ssize_t n, void * buffer) {
 
 unsigned short checksum(void *b, int len) {
 	unsigned short *buffer = b;
-	unsigned int sum=0;
+	unsigned int sum = 0;
 	unsigned short result;
 
-	for ( sum = 0; len > 1; len -= 2 )
+	for (sum = 0; len > 1; len -= 2)
 		sum += *buffer++;
-	if ( len == 1 )
+	if (len == 1)
 		sum += *(unsigned char*)buffer;
 	sum = (sum >> 16) + (sum & 0xFFFF);
 	sum += (sum >> 16);
@@ -96,8 +96,7 @@ void ping(const char *host, const uint8_t *buffer, int size) {
 	const int pid = getpid();
 	packet_id.hdr.un.echo.id = pid;
 
-	packet_id.msg = (uint8_t *)malloc(sizeof(uint8_t) * size);
-	memset(packet_id.msg, 0, size);
+	memset(packet_id.msg, 0, sizeof(packet_id.msg));
 	memcpy(packet_id.msg, buffer, size);
 
 	packet_id.hdr.un.echo.sequence = 0;
@@ -166,25 +165,6 @@ int main(int argc, char const *argv[]) {
 				exit(1);
 			}
 
-			/*
-			opus_int16 decoded_data[MAX_FRAME_SIZE];
-			int SAMPLES_PER_FRAME = opus_decode(decoder, output_data, output_data_length, decoded_data, MAX_FRAME_SIZE, 0);
-			if (SAMPLES_PER_FRAME < 0) {
-				perror("opus_decode");
-				exit(1);
-			}
-
-			//printf("SAMPLES_PER_FRAME: %d\n", SAMPLES_PER_FRAME);
-			//printf("%04x %04x %04x %04x\n", decoded_data[0], decoded_data[1], decoded_data[2], decoded_data[3]);
-
-			unsigned char emit_data[MAX_FRAME_SIZE];
-			// LE => BE
-			for (j = 0; j < SAMPLES_PER_FRAME; j++) {
-				emit_data[2 * j] = decoded_data[j] & 0xFF;
-				emit_data[2 * j + 1] = (decoded_data[j] >> 8) & 0xFF;
-			}
-			*/
-
 			assert(output_data_length < MAX_FRAME_SIZE);
 
 			packet_data[packet_data_size] = (uint8_t)output_data_length;
@@ -196,6 +176,7 @@ int main(int argc, char const *argv[]) {
 		printf("Ping: %d bytes\n", packet_data_size);
 
 		ping(host, packet_data, packet_data_size);
+
 		usleep(200 * 1000);
 	}
 
