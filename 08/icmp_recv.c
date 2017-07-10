@@ -35,12 +35,12 @@ struct receive_packet {
 
 unsigned short checksum(void *b, int len) {
 	unsigned short *buf = b;
-	unsigned int sum=0;
+	unsigned int sum = 0;
 	unsigned short result;
 
-	for ( sum = 0; len > 1; len -= 2 )
+	for (sum = 0; len > 1; len -= 2)
 		sum += *buf++;
-	if ( len == 1 )
+	if (len == 1)
 		sum += *(unsigned char*)buf;
 	sum = (sum >> 16) + (sum & 0xFFFF);
 	sum += (sum >> 16);
@@ -51,9 +51,9 @@ unsigned short checksum(void *b, int len) {
 int main(int argc, char const *argv[]) {
 	int ret, i;
 	OpusDecoder *decoder;
-  int error;
-	opus_int16 output[BITRATE*100];
-	unsigned char pcm_bytes[MAX_FRAME_SIZE*CHANNELS*2];
+	int error;
+	opus_int16 output[BITRATE * 100];
+	unsigned char pcm_bytes[MAX_FRAME_SIZE * CHANNELS * 2];
 
 	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (socket_id < 0) {
@@ -62,13 +62,13 @@ int main(int argc, char const *argv[]) {
 	}
 
 	decoder = opus_decoder_create(SAMPLE_RATE, CHANNELS, &error);
-   if (error<0)
-   {
-      fprintf(stderr, "failed to create decoder: %s\n", opus_strerror(error));
-      return EXIT_FAILURE;
-   }
+	if (error < 0)
+	{
+		fprintf(stderr, "failed to create decoder: %s\n", opus_strerror(error));
+		return EXIT_FAILURE;
+	}
 
-	while(1){
+	while (1) {
 		unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
 		struct sockaddr_in address;
 		int address_len = sizeof(address);
@@ -84,39 +84,39 @@ int main(int argc, char const *argv[]) {
 
 		int message_pointer = 0;
 
-		for(i=0;i<20;i++){
+		for (i = 0; i < 20; i++) {
 
 			int frame_size = buf[ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer];
 			printf("%d\n", message_pointer);
 
 			printf("length: %d\n", frame_size);
 			int j;
-			 for (j = 0; j < frame_size; j++) {
-				      printf("%02x ", buf[ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer + j + 1]);
-			     if (j % 16 == 15) puts("");
-				  }
-			 puts("");
+			for (j = 0; j < frame_size; j++) {
+				printf("%02x ", buf[ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer + j + 1]);
+				if (j % 16 == 15) puts("");
+			}
+			puts("");
 
 			opus_int32 data_size = opus_decode(decoder,
-				buf + ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer + 1,
-		 												 frame_size, output, BITRATE*100, 0);
-		  if (data_size<0)
-      {
-         fprintf(stderr, "decoder failed: %s\n", opus_strerror(error));
-         return EXIT_FAILURE;
-    }
+			                                   buf + ip_header->ihl * 4 + sizeof(icmp_header) + message_pointer + 1,
+			                                   frame_size, output, BITRATE * 100, 0);
+			if (data_size < 0)
+			{
+				fprintf(stderr, "decoder failed: %s\n", opus_strerror(error));
+				return EXIT_FAILURE;
+			}
 
-		message_pointer += frame_size + 1;
+			message_pointer += frame_size + 1;
 
 
-		for(j=0;j<CHANNELS*data_size;j++)
-      {
-         pcm_bytes[2*j]=output[j]&0xFF;
-         pcm_bytes[2*j+1]=(output[j]>>8)&0xFF;
-    }
+			for (j = 0; j < CHANNELS * data_size; j++)
+			{
+				pcm_bytes[2 * j] = output[j] & 0xFF;
+				pcm_bytes[2 * j + 1] = (output[j] >> 8) & 0xFF;
+			}
 
-	  //write(1,pcm_bytes,CHANNELS*data_size*2);
-	}
+			//write(1,pcm_bytes,CHANNELS*data_size*2);
+		}
 
 	}
 
