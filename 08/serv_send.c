@@ -23,30 +23,29 @@ int main(int argc, char const *argv[]) {
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_port = htons(port);
+	address.sin_addr.s_addr = INADDR_ANY;
 
-	ret = inet_aton(host, &(address.sin_addr));
-	if (ret == 0) {
-		perror("inet_aton");
-		exit(1);
-	}
+	bind(socket_id, (struct sockaddr *)&address, sizeof(address));
 
-	ret = connect(socket_id, (struct sockaddr *)&address, sizeof(address));
-	if (ret == -1) {
-		perror("connect");
-		exit(1);
-	}
+	listen(socket_id, 10);
+
+	struct sockaddr_in client_address;
+	socklen_t length = sizeof(struct sockaddr_in);
+	int client_socket_id = accept(socket_id, (struct sockaddr *)&client_address, &length);
+
+	close(socket_id);
 
 	int read_bytes;
 	do {
-		char data[WINDOW_SIZE];
-		read_bytes = recv(socket_id, data, WINDOW_SIZE, 0);
+		uint8_t data[WINDOW_SIZE];
+		read_bytes = fread(data, sizeof(uint8_t), WINDOW_SIZE, stdin);
 		if (read_bytes == -1) {
 			perror("recv");
 			exit(1);
 		}
 
 		if (read_bytes != 0) {
-			printf("%.*s", read_bytes, data);
+			write(client_socket_id, data, read_bytes);
 		}
 	} while(read_bytes > 0);
 

@@ -7,6 +7,7 @@
 #include <resolv.h>
 #include <string.h>
 #include <strings.h>
+#include <opus.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,6 +16,10 @@
 #include <netinet/tcp.h>
 
 #define PACKETSIZE (1024 * 20)
+#define SAMPLE_RATE 44100
+#define BITRATE (64 * 1024)
+#define CHANNELS 1
+#define APPLICATION OPUS_APPLICATION_AUDIO
 
 struct packet {
 	struct icmphdr hdr;
@@ -27,13 +32,13 @@ struct receive_packet {
 	char msg[PACKETSIZE];
 };
 
-/* fd から 必ず n バイト読み, bufへ書く.
+/* fd から 必ず n バイト読み, bufferへ書く.
 	n バイト未満でEOFに達したら, 残りは0で埋める.
 	fd から読み出されたバイト数を返す */
-ssize_t read_n(int fd, ssize_t n, void * buf) {
+ssize_t read_n(int fd, ssize_t n, void * buffer) {
 	ssize_t re = 0;
 	while (re < n) {
-		ssize_t r = read(fd, buf + re, n - re);
+		ssize_t r = read(fd, buffer + re, n - re);
 		if (r == -1) {
 			perror("read");
 			exit(1);
@@ -41,26 +46,26 @@ ssize_t read_n(int fd, ssize_t n, void * buf) {
 		if (r == 0) break;
 		re += r;
 	}
-	memset(buf + re, 0, n - re);
+	memset(buffer + re, 0, n - re);
 	return re;
 }
 
 unsigned short checksum(void *b, int len) {
-	unsigned short *buf = b;
+	unsigned short *buffer = b;
 	unsigned int sum=0;
 	unsigned short result;
 
 	for ( sum = 0; len > 1; len -= 2 )
-		sum += *buf++;
+		sum += *buffer++;
 	if ( len == 1 )
-		sum += *(unsigned char*)buf;
+		sum += *(unsigned char*)buffer;
 	sum = (sum >> 16) + (sum & 0xFFFF);
 	sum += (sum >> 16);
 	result = ~sum;
 	return result;
 }
 
-void ping(const char *host, const char *buf, int size) {
+void ping(const char *host, const char *buffer, int size) {
 	int ret;
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -97,7 +102,7 @@ void ping(const char *host, const char *buf, int size) {
 	packet_id.hdr.un.echo.id = pid;
 
 	memset(packet_id.msg, 0, sizeof(packet_id.msg));
-	memcpy(packet_id.msg, buf, size);
+	memcpy(packet_id.msg, buffer, size);
 
 	packet_id.hdr.un.echo.sequence = 0;
 	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id));
@@ -118,16 +123,36 @@ int main(int argc, char const *argv[]) {
 
 	const char *host = argv[1];
 
-	char buf[PACKETSIZE];
+	OpusEncoder *encoder;
+
+	encoder = opus_encoder_create(SAMPLE_RATE, CHANNELS, APPLICATION, &ret);
+	if (ret < 0) {
+		perror("opus_encoder_create");
+		exit(1);
+	}
+
+	ret = opus_encoder_ctl(encoder, OPUS_SET_BITRATE(BITRATE));
+	if (ret < 0) {
+		perror("opus_encoder_ctl");
+		exit(1);
+	}
+
+	uint8_t buffer[PACKETSIZE * sizeof(uint16_t)];
+	opus_int16 input_data[PACKETSIZE];
 	while (1) {
-		ret = read_n(0, PACKETSIZE, buf);
+		ret = read_n(0, PACKETSIZE * sizeof(uint16_t), buffer);
 		printf("read: %d bytes\n", ret);
 
 		if (ret == 0) {
 			break;
 		}
 
-		ping(host, buf, PACKETSIZE);
+		// BE => LE
+		for (i = 0; i < PACKETSIZE; i++) {
+			input_data[i] = buffer[2 * i + 1] << 8 | buffer[2 * i];
+		}
+
+		ping(host, buffer, PACKETSIZE);
 		usleep(200 * 1000);
 	}
 
