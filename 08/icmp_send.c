@@ -16,21 +16,15 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
 
-#define SAMPLES_PER_FRAME 960
-#define FRAMES_PER_PACKET 50
+#define SAMPLES_PER_FRAME 480
+#define FRAMES_PER_PACKET 20
 #define MAX_FRAME_SIZE 0x100
 #define SAMPLE_RATE 24000
 #define BITRATE (16 * 1024)
 
 struct packet {
 	struct icmphdr hdr;
-	char msg[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
-};
-
-struct receive_packet {
-	struct ip ip_header;
-	struct icmphdr hdr;
-	char msg[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
+	uint8_t *msg;
 };
 
 /* fd から 必ず n バイト読み, bufferへ書く.
@@ -102,15 +96,14 @@ void ping(const char *host, const char *buffer, int size) {
 	const int pid = getpid();
 	packet_id.hdr.un.echo.id = pid;
 
-	memset(packet_id.msg, 0, sizeof(packet_id.msg));
+	packet_id.msg = (uint8_t *)malloc(sizeof(uint8_t) * size);
+	memset(packet_id.msg, 0, size);
 	memcpy(packet_id.msg, buffer, size);
 
-	printf("%02x %02x %02x %02x\n", packet_id.msg[0], packet_id.msg[1], packet_id.msg[2], packet_id.msg[3]);
-
 	packet_id.hdr.un.echo.sequence = 0;
-	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id));
+	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id.hdr) + size);
 
-	if (sendto(socket_id, &packet_id, sizeof(packet_id), 0, (struct sockaddr*)&address, sizeof(address)) <= 0) {
+	if (sendto(socket_id, &packet_id, sizeof(packet_id.hdr) + size, 0, (struct sockaddr*)&address, sizeof(address)) <= 0) {
 		perror("sendto");
 		exit(1);
 	}
@@ -156,7 +149,6 @@ int main(int argc, char const *argv[]) {
 			opus_int16 input_data[SAMPLES_PER_FRAME];
 
 			ret = read_n(0, SAMPLES_PER_FRAME * sizeof(opus_int16), buffer);
-			//printf("Input: %d bytes\n", ret);
 
 			if (ret == 0) {
 				break;
@@ -173,8 +165,6 @@ int main(int argc, char const *argv[]) {
 				perror("opus_encode");
 				exit(1);
 			}
-
-			//printf("Output: %d bytes\n", output_data_length);
 
 			/*
 			opus_int16 decoded_data[MAX_FRAME_SIZE];
@@ -203,8 +193,7 @@ int main(int argc, char const *argv[]) {
 			packet_data_size += output_data_length + 1;
 		}
 
-		printf("%d\n", packet_data_size);
-		printf("%02x %02x %02x %02x\n", packet_data[0], packet_data[1], packet_data[2], packet_data[3]);
+		printf("Ping: %d bytes\n", packet_data_size);
 
 		ping(host, packet_data, packet_data_size);
 		usleep(200 * 1000);
