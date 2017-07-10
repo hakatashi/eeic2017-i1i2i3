@@ -8,6 +8,7 @@
 #include <string.h>
 #include <strings.h>
 #include <opus.h>
+#include <assert.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,21 +16,21 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
 
-#define PACKETSIZE (1024 * 20)
-#define SAMPLE_RATE 44100
-#define BITRATE (64 * 1024)
-#define CHANNELS 1
-#define APPLICATION OPUS_APPLICATION_AUDIO
+#define SAMPLES_PER_FRAME 960
+#define FRAMES_PER_PACKET 50
+#define MAX_FRAME_SIZE 0x100
+#define SAMPLE_RATE 24000
+#define BITRATE (16 * 1024)
 
 struct packet {
 	struct icmphdr hdr;
-	char msg[PACKETSIZE];
+	char msg[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
 };
 
 struct receive_packet {
 	struct ip ip_header;
 	struct icmphdr hdr;
-	char msg[PACKETSIZE];
+	char msg[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
 };
 
 /* fd から 必ず n バイト読み, bufferへ書く.
@@ -104,17 +105,19 @@ void ping(const char *host, const char *buffer, int size) {
 	memset(packet_id.msg, 0, sizeof(packet_id.msg));
 	memcpy(packet_id.msg, buffer, size);
 
+	printf("%02x %02x %02x %02x\n", packet_id.msg[0], packet_id.msg[1], packet_id.msg[2], packet_id.msg[3]);
+
 	packet_id.hdr.un.echo.sequence = 0;
 	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id));
 
 	if (sendto(socket_id, &packet_id, sizeof(packet_id), 0, (struct sockaddr*)&address, sizeof(address)) <= 0) {
 		perror("sendto");
-		return;
+		exit(1);
 	}
 }
 
 int main(int argc, char const *argv[]) {
-	int ret, i;
+	int ret, i, j;
 
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s <host>\n", argv[0]);
@@ -124,10 +127,17 @@ int main(int argc, char const *argv[]) {
 	const char *host = argv[1];
 
 	OpusEncoder *encoder;
+	OpusDecoder *decoder;
 
-	encoder = opus_encoder_create(SAMPLE_RATE, CHANNELS, APPLICATION, &ret);
-	if (ret < 0) {
+	encoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_AUDIO, &ret);
+	if (ret != OPUS_OK) {
 		perror("opus_encoder_create");
+		exit(1);
+	}
+
+	decoder = opus_decoder_create(SAMPLE_RATE, 1, &ret);
+	if (ret != OPUS_OK) {
+		perror("opus_decoder_create");
 		exit(1);
 	}
 
@@ -137,22 +147,66 @@ int main(int argc, char const *argv[]) {
 		exit(1);
 	}
 
-	uint8_t buffer[PACKETSIZE * sizeof(uint16_t)];
-	opus_int16 input_data[PACKETSIZE];
 	while (1) {
-		ret = read_n(0, PACKETSIZE * sizeof(uint16_t), buffer);
-		printf("read: %d bytes\n", ret);
+		uint8_t packet_data[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
+		int packet_data_size = 0;
 
-		if (ret == 0) {
-			break;
+		for (i = 0; i < FRAMES_PER_PACKET; i++) {
+			uint8_t buffer[SAMPLES_PER_FRAME * sizeof(opus_int16)];
+			opus_int16 input_data[SAMPLES_PER_FRAME];
+
+			ret = read_n(0, SAMPLES_PER_FRAME * sizeof(opus_int16), buffer);
+			//printf("Input: %d bytes\n", ret);
+
+			if (ret == 0) {
+				break;
+			}
+
+			// BE => LE
+			for (j = 0; j < SAMPLES_PER_FRAME; j++) {
+				input_data[j] = buffer[2 * j + 1] << 8 | buffer[2 * j];
+			}
+
+			unsigned char output_data[MAX_FRAME_SIZE];
+			opus_int32 output_data_length = opus_encode(encoder, input_data, SAMPLES_PER_FRAME, output_data, MAX_FRAME_SIZE);
+			if (output_data_length < 0) {
+				perror("opus_encode");
+				exit(1);
+			}
+
+			//printf("Output: %d bytes\n", output_data_length);
+
+			/*
+			opus_int16 decoded_data[MAX_FRAME_SIZE];
+			int SAMPLES_PER_FRAME = opus_decode(decoder, output_data, output_data_length, decoded_data, MAX_FRAME_SIZE, 0);
+			if (SAMPLES_PER_FRAME < 0) {
+				perror("opus_decode");
+				exit(1);
+			}
+
+			//printf("SAMPLES_PER_FRAME: %d\n", SAMPLES_PER_FRAME);
+			//printf("%04x %04x %04x %04x\n", decoded_data[0], decoded_data[1], decoded_data[2], decoded_data[3]);
+
+			unsigned char emit_data[MAX_FRAME_SIZE];
+			// LE => BE
+			for (j = 0; j < SAMPLES_PER_FRAME; j++) {
+				emit_data[2 * j] = decoded_data[j] & 0xFF;
+				emit_data[2 * j + 1] = (decoded_data[j] >> 8) & 0xFF;
+			}
+			*/
+
+			assert(output_data_length < MAX_FRAME_SIZE);
+
+			packet_data[packet_data_size] = (uint8_t)output_data_length;
+			memcpy(packet_data + packet_data_size + 1, output_data, output_data_length);
+
+			packet_data_size += output_data_length + 1;
 		}
 
-		// BE => LE
-		for (i = 0; i < PACKETSIZE; i++) {
-			input_data[i] = buffer[2 * i + 1] << 8 | buffer[2 * i];
-		}
+		printf("%d\n", packet_data_size);
+		printf("%02x %02x %02x %02x\n", packet_data[0], packet_data[1], packet_data[2], packet_data[3]);
 
-		ping(host, buffer, PACKETSIZE);
+		ping(host, packet_data, packet_data_size);
 		usleep(200 * 1000);
 	}
 
