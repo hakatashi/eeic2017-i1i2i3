@@ -60,7 +60,7 @@ unsigned short checksum(void *b, int len) {
 	return result;
 }
 
-void ping(const char *host, const char *buffer, int size) {
+void ping(const char *host, const uint8_t *buffer, int size) {
 	int ret;
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;

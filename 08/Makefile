@@ -1,5 +1,5 @@
-COMPILER = gcc
-CFLAGS = -g -Werror -Wextra
+COMPILER = clang
+CFLAGS = -g -Werror -Wall -Wextra
 LDFLAGS = -lopus
 INCLUDE = -I/usr/include/opus
 

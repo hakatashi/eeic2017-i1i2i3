@@ -48,12 +48,17 @@ unsigned short checksum(void *b, int len) {
 	return result;
 }
 
-int main(int argc, char const *argv[]) {
-	int ret, i;
+int main(int argc, const char *argv[]) {
+	int i;
 	OpusDecoder *decoder;
 	int error;
 	opus_int16 output[BITRATE * 100];
 	unsigned char pcm_bytes[MAX_FRAME_SIZE * CHANNELS * 2];
+
+	if (argc != 1) {
+		fprintf(stderr, "Usage: %s\n", argv[0]);
+		exit(1);
+	}
 
 	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (socket_id < 0) {
@@ -71,7 +76,7 @@ int main(int argc, char const *argv[]) {
 	while (1) {
 		unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
 		struct sockaddr_in address;
-		int address_len = sizeof(address);
+		unsigned int address_len = sizeof(address);
 		const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr*)&address, &address_len);
 
 		if (n == -1) {
