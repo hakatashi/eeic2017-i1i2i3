@@ -65,14 +65,6 @@ int main(int argc, const char *argv[]) {
 
 		fprintf(stderr, "Receive: %d bytes, ID = 0x%04X, Seq = %d\n", n, icmp_header->un.echo.id, icmp_header->un.echo.sequence);
 
-		if (icmp_header->un.echo.id != ICMP_IDENTIFIER) {
-			continue;
-		}
-
-		if (icmp_header->un.echo.sequence <= current_sequence_number) {
-			continue;
-		}
-
 		current_sequence_number = icmp_header->un.echo.sequence;
 
 		int message_pointer = 0;
