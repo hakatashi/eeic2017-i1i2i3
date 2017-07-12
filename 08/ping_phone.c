@@ -159,6 +159,10 @@ int main(int argc, char const *argv[]) {
 			perror("inet_aton");
 			exit(1);
 		}
+
+		// Start of connection
+		const uint8_t data[1] = {0};
+		ping(&address, data, sizeof(data), 0);
 	} else {
 		assert(mode == MODE_HOST);
 		await_connection(&address);
@@ -248,8 +252,6 @@ int main(int argc, char const *argv[]) {
 		struct iphdr *ip_header = (struct iphdr*)buf;
 		struct icmphdr *icmp_header = (struct icmphdr*)(buf + ip_header->ihl * 4);
 		uint8_t *icmp_body = buf + ip_header->ihl * 4 + sizeof(icmp_header);
-
-		fprintf(stderr, "Receive: %d bytes, ID = 0x%04X, Seq = %d\n", n, icmp_header->un.echo.id, icmp_header->un.echo.sequence);
 
 		receive_sequence_number = icmp_header->un.echo.sequence;
 
