@@ -21,7 +21,6 @@
 #define SAMPLE_RATE 24000
 #define MAX_FRAME_SIZE 0x100
 #define BITRATE (16 * 1024)
-#define CHANNELS 1
 
 #define ICMP_IDENTIFIER 0xDEAD
 

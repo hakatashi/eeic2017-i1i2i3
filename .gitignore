@@ -4,5 +4,6 @@ a.out
 *.wav
 *.bz2
 *.png
+*.mp3
 *.o
 *.dat
