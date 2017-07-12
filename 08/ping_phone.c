@@ -69,6 +69,8 @@ unsigned short checksum(void *b, int len) {
 }
 
 void ping(struct sockaddr_in *address, const uint8_t *buffer, int size, uint16_t sequence_number) {
+	int ret;
+
 	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (socket_id < 0) {
 		perror("socket");
@@ -98,7 +100,8 @@ void ping(struct sockaddr_in *address, const uint8_t *buffer, int size, uint16_t
 	packet_id.hdr.un.echo.sequence = sequence_number;
 	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id.hdr) + size);
 
-	if (sendto(socket_id, &packet_id, sizeof(packet_id.hdr) + size, 0, (struct sockaddr*)address, sizeof(*address)) <= 0) {
+	ret = sendto(socket_id, &packet_id, sizeof(packet_id.hdr) + size, 0, (struct sockaddr*)address, sizeof(*address));
+	if (ret <= 0) {
 		perror("sendto");
 		exit(1);
 	}
@@ -182,9 +185,12 @@ int main(int argc, char const *argv[]) {
 	if (decoder != NULL) {
 	}
 
-	uint16_t sequence_number = 1;
+	uint16_t send_sequence_number = 1;
+	uint16_t receive_sequence_number = 0;
 
 	while (1) {
+		// Send
+
 		uint8_t packet_data[MAX_FRAME_SIZE * FRAMES_PER_PACKET];
 		int packet_data_size = 0;
 
@@ -218,10 +224,59 @@ int main(int argc, char const *argv[]) {
 			packet_data_size += output_data_length + 1;
 		}
 
-		printf("Ping: %d bytes, Seq = %d\n", packet_data_size, sequence_number);
+		fprintf(stderr, "Ping: %d bytes, Seq = %d\n", packet_data_size, send_sequence_number);
 
-		ping(&address, packet_data, packet_data_size, sequence_number);
-		sequence_number++;
+		ping(&address, packet_data, packet_data_size, send_sequence_number);
+		send_sequence_number++;
+
+		// Receive
+
+		const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
+		if (socket_id < 0) {
+			perror("socket");
+			exit(1);
+		}
+
+		unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
+		unsigned int address_len = sizeof(address);
+		const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr *)&address, &address_len);
+		if (n == -1) {
+			perror("recvfrom");
+			exit(1);
+		}
+
+		struct iphdr *ip_header = (struct iphdr*)buf;
+		struct icmphdr *icmp_header = (struct icmphdr*)(buf + ip_header->ihl * 4);
+		uint8_t *icmp_body = buf + ip_header->ihl * 4 + sizeof(icmp_header);
+
+		fprintf(stderr, "Receive: %d bytes, ID = 0x%04X, Seq = %d\n", n, icmp_header->un.echo.id, icmp_header->un.echo.sequence);
+
+		receive_sequence_number = icmp_header->un.echo.sequence;
+
+		int message_pointer = 0;
+		unsigned int total_output = 0;
+
+		for (int i = 0; i < FRAMES_PER_PACKET; i++) {
+			int frame_size = icmp_body[message_pointer];
+
+			uint8_t *output_data = (uint8_t *)malloc(frame_size * sizeof(uint8_t));
+			memcpy(output_data, icmp_body + message_pointer + 1, frame_size * sizeof(uint8_t));
+
+			opus_int16 decoded_data[SAMPLES_PER_FRAME];
+			opus_int32 data_size = opus_decode(decoder, output_data, frame_size, decoded_data, SAMPLES_PER_FRAME, 0);
+
+			message_pointer += frame_size + 1;
+
+			// LE => BE
+			uint8_t pcm_bytes[SAMPLES_PER_FRAME * sizeof(opus_int16)];
+			for (int j = 0; j < data_size; j++) {
+				pcm_bytes[2 * j] = decoded_data[j] & 0xFF;
+				pcm_bytes[2 * j + 1] = (decoded_data[j] >> 8) & 0xFF;
+			}
+
+			write(1, pcm_bytes, data_size * sizeof(opus_int16));
+			total_output += data_size * sizeof(opus_int16);
+		}
 
 		usleep(200 * 1000);
 	}
