@@ -21,6 +21,7 @@
 #define MAX_FRAME_SIZE 0x100
 #define SAMPLE_RATE 24000
 #define BITRATE (16 * 1024)
+#define PACKETSIZE 0x2000
 
 enum Mode {
 	MODE_HOST,
@@ -114,19 +115,58 @@ void ping(const char *host, const uint8_t *buffer, int size, uint16_t sequence_n
 	}
 }
 
-void client(const char *host) {
+char * await_connection() {
+	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
+	if (socket_id < 0) {
+		perror("socket");
+		exit(1);
+	}
+
+	unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
+	struct sockaddr_in address;
+	unsigned int address_len = sizeof(address);
+
+	const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr*)&address, &address_len);
+	if (n == -1) {
+		perror("recvfrom");
+		exit(1);
+	}
+
+	char address_string[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(address.sin_addr), address_string, INET_ADDRSTRLEN);
+	printf("connected from %s\n", address_string);
+
+	return "";
+}
+
+int main(int argc, char const *argv[]) {
 	int ret, i, j;
 
-	OpusEncoder *encoder;
-	OpusDecoder *decoder;
+	if (argc >= 3) {
+		const char *usage =
+			"Usage: %s                 (for host)\n"
+			"       %s <host address>  (for client)\n";
+		fprintf(stderr, usage, argv[0], argv[0]);
+		exit(1);
+	}
 
-	encoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_AUDIO, &ret);
+	const enum Mode mode = (argc == 2) ? MODE_CLIENT : MODE_HOST;
+
+	const char *host;
+	if (mode == MODE_CLIENT) {
+		host = argv[1];
+	} else {
+		assert(mode == MODE_HOST);
+		host = await_connection();
+	}
+
+	OpusEncoder *encoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_AUDIO, &ret);
 	if (ret != OPUS_OK) {
 		perror("opus_encoder_create");
 		exit(1);
 	}
 
-	decoder = opus_decoder_create(SAMPLE_RATE, 1, &ret);
+	OpusDecoder *decoder = opus_decoder_create(SAMPLE_RATE, 1, &ret);
 	if (ret != OPUS_OK) {
 		perror("opus_decoder_create");
 		exit(1);
@@ -136,6 +176,9 @@ void client(const char *host) {
 	if (ret < 0) {
 		perror("opus_encoder_ctl");
 		exit(1);
+	}
+
+	if (decoder != NULL) {
 	}
 
 	uint16_t sequence_number = 1;
@@ -180,28 +223,6 @@ void client(const char *host) {
 		sequence_number++;
 
 		usleep(200 * 1000);
-	}
-
-	return;
-}
-
-int main(int argc, char const *argv[]) {
-	if (argc >= 3) {
-		const char *usage =
-			"Usage: %s                 (for host)\n"
-			"       %s <host address>  (for client)\n";
-		fprintf(stderr, usage, argv[0], argv[0]);
-		exit(1);
-	}
-
-	const enum Mode mode = (argc == 2) ? MODE_CLIENT : MODE_HOST;
-
-	if (mode == MODE_CLIENT) {
-		const char *host = argv[1];
-		client(host);
-	}
-
-	if (mode == MODE_HOST) {
 	}
 
 	return 0;
