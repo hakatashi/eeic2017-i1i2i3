@@ -131,7 +131,7 @@ void await_connection(struct sockaddr_in *address) {
 		exit(1);
 	}
 
-	printf("connected from %s\n", address_string);
+	fprintf(stderr, "connected from %s\n", address_string);
 
 	return;
 }
