@@ -68,18 +68,7 @@ unsigned short checksum(void *b, int len) {
 	return result;
 }
 
-void ping(const char *host, const uint8_t *buffer, int size, uint16_t sequence_number) {
-	int ret;
-	struct sockaddr_in address;
-	address.sin_family = AF_INET;
-	address.sin_port = 0;
-
-	ret = inet_aton(host, &(address.sin_addr));
-	if (ret == 0) {
-		perror("inet_aton");
-		exit(1);
-	}
-
+void ping(struct sockaddr_in *address, const uint8_t *buffer, int size, uint16_t sequence_number) {
 	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (socket_id < 0) {
 		perror("socket");
@@ -109,13 +98,13 @@ void ping(const char *host, const uint8_t *buffer, int size, uint16_t sequence_n
 	packet_id.hdr.un.echo.sequence = sequence_number;
 	packet_id.hdr.checksum = checksum(&packet_id, sizeof(packet_id.hdr) + size);
 
-	if (sendto(socket_id, &packet_id, sizeof(packet_id.hdr) + size, 0, (struct sockaddr*)&address, sizeof(address)) <= 0) {
+	if (sendto(socket_id, &packet_id, sizeof(packet_id.hdr) + size, 0, (struct sockaddr*)address, sizeof(*address)) <= 0) {
 		perror("sendto");
 		exit(1);
 	}
 }
 
-char * await_connection() {
+void await_connection(struct sockaddr_in *address) {
 	const int socket_id = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (socket_id < 0) {
 		perror("socket");
@@ -123,20 +112,25 @@ char * await_connection() {
 	}
 
 	unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
-	struct sockaddr_in address;
-	unsigned int address_len = sizeof(address);
+	unsigned int address_len = sizeof(*address);
 
-	const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr*)&address, &address_len);
+	const int n = recvfrom(socket_id, buf, sizeof(buf), 0, (struct sockaddr *)address, &address_len);
+
 	if (n == -1) {
 		perror("recvfrom");
 		exit(1);
 	}
 
 	char address_string[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET, &(address.sin_addr), address_string, INET_ADDRSTRLEN);
+	const char *ret = inet_ntop(address->sin_family, &(address->sin_addr), address_string, INET6_ADDRSTRLEN);
+	if (ret == NULL) {
+		perror("inet_ntop");
+		exit(1);
+	}
+
 	printf("connected from %s\n", address_string);
 
-	return "";
+	return;
 }
 
 int main(int argc, char const *argv[]) {
@@ -152,12 +146,19 @@ int main(int argc, char const *argv[]) {
 
 	const enum Mode mode = (argc == 2) ? MODE_CLIENT : MODE_HOST;
 
-	const char *host;
+	struct sockaddr_in address;
 	if (mode == MODE_CLIENT) {
-		host = argv[1];
+		address.sin_family = AF_INET;
+		address.sin_port = 0; // No "port" for ICMP. So this is dummy.
+
+		ret = inet_aton(argv[1], &(address.sin_addr));
+		if (ret == 0) {
+			perror("inet_aton");
+			exit(1);
+		}
 	} else {
 		assert(mode == MODE_HOST);
-		host = await_connection();
+		await_connection(&address);
 	}
 
 	OpusEncoder *encoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_AUDIO, &ret);
@@ -219,7 +220,7 @@ int main(int argc, char const *argv[]) {
 
 		printf("Ping: %d bytes, Seq = %d\n", packet_data_size, sequence_number);
 
-		ping(host, packet_data, packet_data_size, sequence_number);
+		ping(&address, packet_data, packet_data_size, sequence_number);
 		sequence_number++;
 
 		usleep(200 * 1000);
