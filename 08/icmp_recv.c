@@ -45,8 +45,6 @@ int main(int argc, const char *argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	uint16_t current_sequence_number = 0;
-
 	while (1) {
 		unsigned char buf[PACKETSIZE * sizeof(uint16_t)];
 		struct sockaddr_in address;
@@ -63,8 +61,6 @@ int main(int argc, const char *argv[]) {
 		uint8_t *icmp_body = buf + ip_header->ihl * 4 + sizeof(icmp_header);
 
 		fprintf(stderr, "Receive: %d bytes, ID = 0x%04X, Seq = %d\n", n, icmp_header->un.echo.id, icmp_header->un.echo.sequence);
-
-		current_sequence_number = icmp_header->un.echo.sequence;
 
 		int message_pointer = 0;
 		unsigned int total_output = 0;

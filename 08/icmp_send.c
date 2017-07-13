@@ -120,17 +120,10 @@ int main(int argc, char const *argv[]) {
 	const char *host = argv[1];
 
 	OpusEncoder *encoder;
-	OpusDecoder *decoder;
 
 	encoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION_AUDIO, &ret);
 	if (ret != OPUS_OK) {
 		perror("opus_encoder_create");
-		exit(1);
-	}
-
-	decoder = opus_decoder_create(SAMPLE_RATE, 1, &ret);
-	if (ret != OPUS_OK) {
-		perror("opus_decoder_create");
 		exit(1);
 	}
 

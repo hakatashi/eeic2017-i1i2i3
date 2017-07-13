@@ -190,7 +190,6 @@ int main(int argc, char const *argv[]) {
 	}
 
 	uint16_t send_sequence_number = 1;
-	uint16_t receive_sequence_number = 0;
 
 	while (1) {
 		// Send
@@ -252,8 +251,6 @@ int main(int argc, char const *argv[]) {
 		struct iphdr *ip_header = (struct iphdr*)buf;
 		struct icmphdr *icmp_header = (struct icmphdr*)(buf + ip_header->ihl * 4);
 		uint8_t *icmp_body = buf + ip_header->ihl * 4 + sizeof(icmp_header);
-
-		receive_sequence_number = icmp_header->un.echo.sequence;
 
 		int message_pointer = 0;
 		unsigned int total_output = 0;
