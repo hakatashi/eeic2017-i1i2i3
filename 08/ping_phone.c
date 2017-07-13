@@ -280,7 +280,7 @@ int main(int argc, char const *argv[]) {
 			total_output += data_size * sizeof(opus_int16);
 		}
 
-		usleep(200 * 1000);
+		usleep(1000 * 1000);
 	}
 
 	return 0;
